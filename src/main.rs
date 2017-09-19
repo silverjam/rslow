@@ -194,7 +194,7 @@ fn main() {
                             }
 
                             Err(error) => {
-                                println!("read error: {}", error.to_string());
+                                warn!("read error: {}", error.to_string());
                                 return;
                             },
                         }
@@ -232,17 +232,18 @@ fn main() {
                                     return;
 
                                 } else {
-                                    //println!("Read {} bytes", n);
-
                                     let slice = &client_buffer[..n];
 
                                     upstream_stream.write_all(slice).unwrap_or_else(|error| {
-                                        println!("write_all: {}", error);
+                                        warn!("write failed: {}", error);
                                         exit = true;
                                     });
                                 }
                             }
-                            Err(error) => panic!(error.to_string()),
+
+                            Err(error) => {
+                                warn!("client read error: {}", error);
+                            }
                         }
                     }
                 };
