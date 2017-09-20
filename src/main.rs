@@ -19,6 +19,8 @@ use std::collections::VecDeque;
 
 use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 
+use std::time::{Duration, SystemTime};
+
 struct Buffer {
     buffer: Box<[u8;4096]>,
     length: usize,
@@ -29,18 +31,29 @@ fn main() {
 
     env_logger::init().unwrap();
 
-    let listener = TcpListener::bind("127.0.0.1:9123").unwrap();
+    let upstream_host = "10.1.22.65";
+    let upstream_port = 2102;
+    /*
+    let upstream_host = "127.0.0.1";
+    let upstream_port = 8000;
+    */
+
+    let bind_address = "0.0.0.0:2102";
+
+    let listener = TcpListener::bind(bind_address).unwrap();
     info!("listening started, ready to accept");
 
-    let host = "www.example.com";
-    let port = 80;
+    let time_start = SystemTime::now();
+
+    const SECS_TILL_DROP : u64 = 10;
+    const DROP_FACTOR : usize = 11;
 
     for client_stream in listener.incoming() {
         thread::spawn(move || {
 
             let mut client_stream = client_stream.unwrap();
 
-            let upstream_stream = TcpStream::connect((host, port)).unwrap_or_else(|error| {
+            let upstream_stream = TcpStream::connect((upstream_host, upstream_port)).unwrap_or_else(|error| {
                 panic!(error.to_string());
             });
 
@@ -49,7 +62,7 @@ fn main() {
             let queue : VecDeque<Buffer> = VecDeque::new();
             let queue_lock = Arc::new(Mutex::new(queue));
 
-            let rate = 10000;
+            let rate = 100 * 1024;
 
             let token_bucket = Arc::new(AtomicUsize::new(0));
             let token_threads_quit = Arc::new(AtomicBool::new(false));
@@ -57,16 +70,23 @@ fn main() {
             let sleep_ms : usize = 100;
             let tokens_per_sleep = rate / sleep_ms;
 
-            let token_bucket_feed = token_bucket.clone();
-            let feed_thread_sleep = time::Duration::from_millis(sleep_ms as u64);
+            let data_rate = (10 * (rate / sleep_ms))/1024;
+            info!("Starting rate is {} kB/s", data_rate);
 
-            let consume_thread_sleep = time::Duration::from_millis((sleep_ms/10) as u64);
+            let token_bucket_feed = token_bucket.clone();
+            let feed_thread_sleep = Duration::from_millis(sleep_ms as u64);
+
+            let consume_thread_sleep = Duration::from_millis((sleep_ms/10) as u64);
 
             {
                 let token_bucket = token_bucket.clone();
                 let token_threads_quit = token_threads_quit.clone();
 
+                let mut tokens_per_sleep = tokens_per_sleep;
+                let mut tokens_per_sleep_adjusted = false;
+
                 let func = move || {
+
                     loop {
                         if token_threads_quit.load(Ordering::SeqCst) {
                             info!("Token producer thread quitting...");
@@ -79,6 +99,20 @@ fn main() {
 
                         if tokens >= tokens_per_sleep*2 {
                             continue;
+                        }
+
+                        let secs = time_start.elapsed().unwrap().as_secs();
+
+                        if secs >= SECS_TILL_DROP && !tokens_per_sleep_adjusted {
+
+                            let rate = rate / DROP_FACTOR;
+
+                            tokens_per_sleep = rate / sleep_ms;
+                            tokens_per_sleep_adjusted = true;
+
+                            let data_rate = (10.0 * ((rate as f64) / (sleep_ms as f64)))/1024.0;
+
+                            info!("Dropping rate to {} kB/s (tokens per sleep: {})", data_rate, tokens_per_sleep);
                         }
 
                         token_bucket.fetch_add(tokens_per_sleep, Ordering::SeqCst);
@@ -138,7 +172,7 @@ fn main() {
                                         bufobj.length -= slice_len;
                                         bufobj.start += slice_len;
 
-                                        queue.push_back(bufobj);
+                                        queue.push_front(bufobj);
                                     }
 
                                     let sub_tokens = token_bucket.fetch_sub(slice_len, Ordering::SeqCst);
