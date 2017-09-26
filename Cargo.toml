@@ -6,3 +6,4 @@ authors = ["Jason Mobarak <jason@swiftnav.com>"]
 [dependencies]
 env_logger = "0.4.3"
 log = "0.3"
+clap = {version = "2.19", features = ["yaml"]}

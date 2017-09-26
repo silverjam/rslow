@@ -1,0 +1,11 @@
+name: rslow
+version: "1.0"
+about: Simple network proxy to simiulate slow connections
+args:
+    - upstream:
+        short: u
+        long: upstream
+        value_name: HOST:PORT 
+        help: Upstream server to connect to
+        takes_value: true
+        required: true

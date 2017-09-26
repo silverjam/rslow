@@ -21,6 +21,12 @@ use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 
 use std::time::{Duration, SystemTime};
 
+#[macro_use]
+extern crate clap;
+use clap::App;
+
+use std::process;
+
 struct Buffer {
     buffer: Box<[u8;4096]>,
     length: usize,
@@ -31,8 +37,26 @@ fn main() {
 
     env_logger::init().unwrap();
 
-    let upstream_host = "10.1.22.65";
-    let upstream_port = 2102;
+    let yaml = load_yaml!("cli.yml");
+
+    let app = App::from_yaml(yaml);
+    let matches = app.clone().get_matches();
+
+    let upstream = matches.value_of("upstream").unwrap();
+    println!("upstream: {}", upstream);
+
+    if ! upstream.contains(":") {
+        app.usage("Argument most be in the format HOST:PORT");
+        process::exit(1);
+    }
+
+    let split = upstream.split(":");
+    let vec: Vec<&str> = split.collect();
+
+    let upstream_host = String::from(vec[0]);
+    let upstream_port :u16 = vec[1].parse().unwrap_or_else(|error| {
+
+    });
     /*
     let upstream_host = "127.0.0.1";
     let upstream_port = 8000;
@@ -43,15 +67,19 @@ fn main() {
     let listener = TcpListener::bind(bind_address).unwrap();
     info!("listening started, ready to accept");
 
-    let time_start = SystemTime::now();
-
     const SECS_TILL_DROP : u64 = 10;
     const DROP_FACTOR : usize = 11;
 
     for client_stream in listener.incoming() {
+
+        let upstream_host = upstream_host.clone();
+
         thread::spawn(move || {
 
             let mut client_stream = client_stream.unwrap();
+            let time_start = SystemTime::now();
+
+            let upstream_host : &str = upstream_host.as_ref();
 
             let upstream_stream = TcpStream::connect((upstream_host, upstream_port)).unwrap_or_else(|error| {
                 panic!(error.to_string());
