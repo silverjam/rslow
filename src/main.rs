@@ -33,10 +33,11 @@ struct Buffer {
     start: usize,
 }
 
+static upstream_host: String = String { vec: Vec::new() };
+
 fn main() {
 
     env_logger::init().unwrap();
-
     let yaml = load_yaml!("cli.yml");
 
     let app = App::from_yaml(yaml);
@@ -53,10 +54,12 @@ fn main() {
     let split = upstream.split(":");
     let vec: Vec<&str> = split.collect();
 
-    let upstream_host = String::from(vec[0]);
+    upstream_host.push_str(vec[0]);
     let upstream_port :u16 = vec[1].parse().unwrap_or_else(|error| {
-
+        app.usage("Argument most be an integer");
+        process::exit(1);
     });
+
     /*
     let upstream_host = "127.0.0.1";
     let upstream_port = 8000;
@@ -72,16 +75,14 @@ fn main() {
 
     for client_stream in listener.incoming() {
 
-        let upstream_host = upstream_host.clone();
+        let upstream_host_ : &str = upstream_host.as_ref();
 
         thread::spawn(move || {
 
             let mut client_stream = client_stream.unwrap();
             let time_start = SystemTime::now();
 
-            let upstream_host : &str = upstream_host.as_ref();
-
-            let upstream_stream = TcpStream::connect((upstream_host, upstream_port)).unwrap_or_else(|error| {
+            let upstream_stream = TcpStream::connect((upstream_host_, upstream_port)).unwrap_or_else(|error| {
                 panic!(error.to_string());
             });
 
