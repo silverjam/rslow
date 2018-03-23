@@ -33,8 +33,6 @@ struct Buffer {
     start: usize,
 }
 
-static upstream_host: String = String { vec: Vec::new() };
-
 fn main() {
 
     env_logger::init().unwrap();
@@ -50,6 +48,8 @@ fn main() {
         app.usage("Argument most be in the format HOST:PORT");
         process::exit(1);
     }
+
+    let mut upstream_host: String = "".to_string();
 
     let split = upstream.split(":");
     let vec: Vec<&str> = split.collect();
@@ -75,14 +75,14 @@ fn main() {
 
     for client_stream in listener.incoming() {
 
-        let upstream_host_ : &str = upstream_host.as_ref();
+        let upstream_host_ : String = upstream_host.clone();
 
         thread::spawn(move || {
 
             let mut client_stream = client_stream.unwrap();
             let time_start = SystemTime::now();
 
-            let upstream_stream = TcpStream::connect((upstream_host_, upstream_port)).unwrap_or_else(|error| {
+            let upstream_stream = TcpStream::connect((upstream_host_.as_ref(), upstream_port)).unwrap_or_else(|error| {
                 panic!(error.to_string());
             });
 
